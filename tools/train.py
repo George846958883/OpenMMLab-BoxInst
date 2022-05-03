@@ -164,21 +164,26 @@ def main():
         cfg.model,
         train_cfg=cfg.get('train_cfg'),
         test_cfg=cfg.get('test_cfg'))
-    model.init_weights()
-
+    model.init_weights()                                #初始化模型权重，若是cfg指定了文件url则会自动下载
+    # 初始化数据集
     datasets = [build_dataset(cfg.data.train)]
-    if len(cfg.workflow) == 2:
+    if len(cfg.workflow) == 2:                          # 需要看看build_dataset怎么搞的，怎么处理这个pipeline
         val_dataset = copy.deepcopy(cfg.data.val)
         val_dataset.pipeline = cfg.data.train.pipeline
         datasets.append(build_dataset(val_dataset))
-    if cfg.checkpoint_config is not None:
+        
+        
+    if cfg.checkpoint_config is not None:               #一般流程
         # save mmdet version, config file content and class names in
         # checkpoints as meta data
         cfg.checkpoint_config.meta = dict(
             mmdet_version=__version__ + get_git_hash()[:7],
             CLASSES=datasets[0].CLASSES)
     # add an attribute for visualization convenience
-    model.CLASSES = datasets[0].CLASSES
+    model.CLASSES = datasets[0].CLASSES                 
+    
+    
+    #训练，distributed是是否分布式训练(是啥)
     train_detector(
         model,
         datasets,

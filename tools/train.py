@@ -19,9 +19,10 @@ from mmdet.utils import collect_env, get_root_logger
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Train a detector')
-    parser.add_argument('config', help='train config file path')
-    parser.add_argument('--work-dir', help='the dir to save logs and models')
+    # 参数配置
+    parser = argparse.ArgumentParser(description='Train a detector')        # 初始化参数集合
+    parser.add_argument('config', help='train config file path')            # 添加属性"配置文件"，用于添加配置文件
+    parser.add_argument('--work-dir', help='the dir to save logs and models')   # 这种"--"的是可选属性，不选即为none
     parser.add_argument(
         '--resume-from', help='the checkpoint file to resume from')
     parser.add_argument(

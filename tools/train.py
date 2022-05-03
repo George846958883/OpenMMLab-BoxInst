@@ -103,7 +103,7 @@ def main():
     if args.work_dir is not None:
         # update configs according to CLI args if args.work_dir is not None
         cfg.work_dir = args.work_dir
-    elif cfg.get('work_dir', None) is None:
+    elif cfg.get('work_dir', None) is None:                                             # 工作空间
         # use config filename as default work_dir if cfg.work_dir is None
         cfg.work_dir = osp.join('./work_dirs',
                                 osp.splitext(osp.basename(args.config))[0])
@@ -112,9 +112,9 @@ def main():
     if args.gpu_ids is not None:
         cfg.gpu_ids = args.gpu_ids
     else:
-        cfg.gpu_ids = range(1) if args.gpus is None else range(args.gpus)
+        cfg.gpu_ids = range(1) if args.gpus is None else range(args.gpus)               # gpu_ids：range(args.gpus)
 
-    # init distributed env first, since logger depends on the dist info.
+    # init distributed env first, since logger depends on the dist info.                # 分布式训练，分布式训练是什么？
     if args.launcher == 'none':
         distributed = False
     else:
@@ -125,11 +125,11 @@ def main():
         cfg.gpu_ids = range(world_size)
 
     # create work_dir
-    mmcv.mkdir_or_exist(osp.abspath(cfg.work_dir))
+    mmcv.mkdir_or_exist(osp.abspath(cfg.work_dir))                                      # mmcv.mkdir_or_exist在指定位置创建工作空间
     # dump config
-    cfg.dump(osp.join(cfg.work_dir, osp.basename(args.config)))
+    cfg.dump(osp.join(cfg.work_dir, osp.basename(args.config)))                         # 创建json
     # init the logger before other steps
-    timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())
+    timestamp = time.strftime('%Y%m%d_%H%M%S', time.localtime())                        # 时间戳
     log_file = osp.join(cfg.work_dir, f'{timestamp}.log')
     logger = get_root_logger(log_file=log_file, log_level=cfg.log_level)
 
@@ -156,6 +156,9 @@ def main():
     cfg.seed = args.seed
     meta['seed'] = args.seed
     meta['exp_name'] = osp.basename(args.config)
+    
+    
+    # 开始build模型，build_detector用于创建模型
 
     model = build_detector(
         cfg.model,

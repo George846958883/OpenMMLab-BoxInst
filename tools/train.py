@@ -28,8 +28,9 @@ def parse_args():
     parser.add_argument(
         '--no-validate',
         action='store_true',
-        help='whether not to evaluate the checkpoint during training')
-    group_gpus = parser.add_mutually_exclusive_group()
+        help='whether not to evaluate the checkpoint during training')      # 是否训练同时validation，默认true(store_true就是true)
+                                                                            # 此外可以添加参数：choice = [...,...,...],type = ...    这个用于规定取值，没有type会报错
+    group_gpus = parser.add_mutually_exclusive_group()                      # 互斥组group_gpus，这玩意下的属性只能存在一个，本质还是在parser下的
     group_gpus.add_argument(
         '--gpus',
         type=int,
@@ -41,7 +42,7 @@ def parse_args():
         nargs='+',
         help='ids of gpus to use '
         '(only applicable to non-distributed training)')
-    parser.add_argument('--seed', type=int, default=None, help='random seed')
+    parser.add_argument('--seed', type=int, default=None, help='random seed')   # 随机种子
     parser.add_argument(
         '--deterministic',
         action='store_true',
@@ -87,7 +88,7 @@ def parse_args():
 def main():
     args = parse_args()
 
-    cfg = Config.fromfile(args.config)
+    cfg = Config.fromfile(args.config)          # 读取args.config位置的配置文件
     if args.cfg_options is not None:
         cfg.merge_from_dict(args.cfg_options)
     # import modules from string list.

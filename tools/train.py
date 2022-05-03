@@ -166,7 +166,7 @@ def main():
         test_cfg=cfg.get('test_cfg'))
     model.init_weights()                                #初始化模型权重，若是cfg指定了文件url则会自动下载
     # 初始化数据集
-    datasets = [build_dataset(cfg.data.train)]
+    datasets = [build_dataset(cfg.data.train)]          # 这个data.train在../configs/_base_/datasets/coco_detection.py
     if len(cfg.workflow) == 2:                          # 需要看看build_dataset怎么搞的，怎么处理这个pipeline
         val_dataset = copy.deepcopy(cfg.data.val)
         val_dataset.pipeline = cfg.data.train.pipeline

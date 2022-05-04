@@ -151,7 +151,7 @@ def train_detector(model,
         eval_hook = DistEvalHook if distributed else EvalHook
         runner.register_hook(eval_hook(val_dataloader, **eval_cfg))
 
-    # user-defined hooks
+    # user-defined hooks                                                    # 用于初始化hook, 需要初始化的hook名字定义在cfg.costom_hooks里，hook函数定义在Registry HOOKS里
     if cfg.get('custom_hooks', None):
         custom_hooks = cfg.custom_hooks                       # type:[dict(),...]
         assert isinstance(custom_hooks, list), \

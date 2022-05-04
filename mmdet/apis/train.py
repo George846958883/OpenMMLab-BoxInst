@@ -71,6 +71,7 @@ def train_detector(model,
     ]
 
     # put model on gpus
+    #多卡则distributed == True
     if distributed:
         find_unused_parameters = cfg.get('find_unused_parameters', False)
         # Sets the `find_unused_parameters` parameter in
@@ -98,7 +99,8 @@ def train_detector(model,
     else:
         if 'total_epochs' in cfg:
             assert cfg.total_epochs == cfg.runner.max_epochs
-
+  
+    # 执行器，管理整个训练流程。default_args初始化BaseRunner的构造函数。cfg.runner指定runner类别，这里是EpochBasedRunner，以及max_epoch
     runner = build_runner(
         cfg.runner,
         default_args=dict(
@@ -124,7 +126,7 @@ def train_detector(model,
     # register hooks
     runner.register_training_hooks(cfg.lr_config, optimizer_config,
                                    cfg.checkpoint_config, cfg.log_config,
-                                   cfg.get('momentum_config', None))
+                                   cfg.get('momentum_config', None))          #lr_config指定学习率策略，包括warmup、lr下降策略
     if distributed:
         if isinstance(runner, EpochBasedRunner):
             runner.register_hook(DistSamplerSeedHook())
@@ -151,20 +153,23 @@ def train_detector(model,
 
     # user-defined hooks
     if cfg.get('custom_hooks', None):
-        custom_hooks = cfg.custom_hooks
+        custom_hooks = cfg.custom_hooks                       # type:[dict(),...]
         assert isinstance(custom_hooks, list), \
             f'custom_hooks expect list type, but got {type(custom_hooks)}'
-        for hook_cfg in cfg.custom_hooks:
+        for hook_cfg in cfg.custom_hooks:                     # type:dict()
             assert isinstance(hook_cfg, dict), \
                 'Each item in custom_hooks expects dict type, but got ' \
                 f'{type(hook_cfg)}'
             hook_cfg = hook_cfg.copy()
-            priority = hook_cfg.pop('priority', 'NORMAL')
-            hook = build_from_cfg(hook_cfg, HOOKS)
+            priority = hook_cfg.pop('priority', 'NORMAL')             # 要是没有对应叫做'priority'的key, 则返回'NORMAL'
+            hook = build_from_cfg(hook_cfg, HOOKS)                    # 1、找出cfg的type; 2、判断type是否是个str,Registry中找出叫type的类; 3、返回由cfg初始化的类
             runner.register_hook(hook, priority=priority)
 
     if cfg.resume_from:
         runner.resume(cfg.resume_from)
     elif cfg.load_from:
-        runner.load_checkpoint(cfg.load_from)
-    runner.run(data_loaders, cfg.workflow)
+        runner.load_checkpoint(cfg.load_from)           #以dict形式保存模型信息
+        
+    runner.run(data_loaders, cfg.workflow)              # 根据workflow的策略，确定train()和val()的运行策略并运行。这里的val直接使用的是dataloader，
+                                                        # 也就是说是拿训练集数据进行测试，并没有修改数据集
+                                                        # train()和val()会执行model.train_step()或model.val_step()，会调用forward出loss

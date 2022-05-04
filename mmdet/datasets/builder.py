@@ -89,9 +89,9 @@ def build_dataloader(dataset,
     Args:
         dataset (Dataset): A PyTorch dataset.
         samples_per_gpu (int): Number of training samples on each GPU, i.e.,
-            batch size of each GPU.
+            batch size of each GPU. 每个GPU扔多少张图，指定这个而不是总的batch_size
         workers_per_gpu (int): How many subprocesses to use for data loading
-            for each GPU.
+            for each GPU.   决定加载程序的速度
         num_gpus (int): Number of GPUs. Only used in non-distributed training.
         dist (bool): Distributed training/test or not. Default: True.
         shuffle (bool): Whether to shuffle the data at every epoch.

@@ -43,26 +43,26 @@ class CondInst(SingleStageDetector):
             for masks in gt_masks:
                 masks = masks.expand(H, W, 0, 0)
                 tensor_masks.append(
-                    masks.to_tensor(dtype=torch.uint8, device=img.device))
+                    masks.to_tensor(dtype=torch.uint8, device=img.device))              # gt转tensor
             gt_masks = tensor_masks
 
-        x = self.extract_feat(img)
+        x = self.extract_feat(img)                                                      # 特征提取网络(backbone)
         cls_score, bbox_pred, centerness, param_pred = \
-                self.bbox_head(x, self.mask_head.param_conv)
+                self.bbox_head(x, self.mask_head.param_conv)                            # 分类回归、中心度(FCOS)、参数预测应该是指condinst的mask_head的参数预测(和什么有关？)
         bbox_head_loss_inputs = (cls_score, bbox_pred, centerness) + (
-            gt_bboxes, gt_labels, img_metas)
+            gt_bboxes, gt_labels, img_metas)                                            # 打包predict和gt
         losses, coors, level_inds, img_inds, gt_inds = self.bbox_head.loss(
-            *bbox_head_loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
+            *bbox_head_loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)                  # bbox_head输出：损失、坐标、....and?
 
-        mask_feat = self.mask_branch(x)
+        mask_feat = self.mask_branch(x)                                                 # x输入mask_branch, 得到输出
         if self.segm_head is not None:
             segm_pred = self.segm_head(x[0])
             loss_segm = self.segm_head.loss(segm_pred, gt_masks, gt_labels)
-            losses.update(loss_segm)
+            losses.update(loss_segm)                                                    # 这个是什么, 原文里没提过, 说不定是之后能够添加的另外的head。另提一句，loss一般和model放在一块
 
         inputs = (cls_score, centerness, param_pred, coors, level_inds, img_inds, gt_inds)
         param_pred, coors, level_inds, img_inds, gt_inds = self.mask_head.training_sample(*inputs)
-        mask_pred = self.mask_head(mask_feat, param_pred, coors, level_inds, img_inds)
+        mask_pred = self.mask_head(mask_feat, param_pred, coors, level_inds, img_inds)  # mask_feat: mask_branch的输出; praram_pred: bbox_head预测mask_head的参数; coors、level_inds、img_inds: 都是bbox的输出，但是不知道是啥
         loss_mask = self.mask_head.loss(img, img_metas, mask_pred, gt_inds, gt_bboxes,
                                         gt_masks, gt_labels)
         losses.update(loss_mask)

@@ -927,7 +927,8 @@ class CondInstMaskBranch(BaseModule):
                      distribution='uniform',
                      a=1,
                      mode='fan_in',
-                     nonlinearity='leaky_relu')):
+                     nonlinearity='leaky_relu')):                               # 4个3×3卷积+1个1×1卷积，隐藏层(3×3)通道数128，输出(1×1)通道数8，输入通道数256
+                                                                                # in_indices: 取fpn的哪几层; strides: fpn的这几层的strides
         super(CondInstMaskBranch, self).__init__(init_cfg)
         self.in_channels = in_channels
         assert len(in_indices) == len(strides)
@@ -944,7 +945,7 @@ class CondInstMaskBranch(BaseModule):
     def _init_layers(self):
         """Initialize layers of the head."""
         self.refines = nn.ModuleList()
-        for _ in self.in_indices:
+        for _ in self.in_indices:                                                   # self.refines是个stride = [8, 16, 32]的三个平行的卷积层, in:256, out:128
             self.refines.append(ConvModule(
                 self.in_channels,
                 self.branch_channels,
@@ -964,7 +965,7 @@ class CondInstMaskBranch(BaseModule):
                 norm_cfg=self.norm_cfg))
         mask_branch.append(
             nn.Conv2d(self.branch_channels, self.branch_out_channels, 1))
-        self.mask_branch = nn.Sequential(*mask_branch)
+        self.mask_branch = nn.Sequential(*mask_branch)                                  # 本来是个list，使用nn.Sequential包装起来
 
     def forward(self, x):
         mask_stride = self.strides[self.in_indices[0]]
@@ -975,7 +976,7 @@ class CondInstMaskBranch(BaseModule):
             p_x = self.refines[i](x[self.in_indices[i]])
             p_x = aligned_bilinear(p_x, stride // mask_stride)
             mask_x = mask_x + p_x
-        return self.mask_branch(mask_x)
+        return self.mask_branch(mask_x)                                                 # 应该是fpn的前三层输出输入self.refines(), 输出对齐成0层的分辨率, 再输入mask_branch
 
 
 @HEADS.register_module()
@@ -1005,7 +1006,8 @@ class CondInstMaskHead(BaseModule):
                      type='Normal',
                      layer="Conv2d",
                      std=0.01,
-                     bias=0)):
+                     bias=0)):                                               # 这参数也太多了吧，就是3(dynamic_convs)个1×1卷积而已啊，噢还有位置编码
+                                                                             # 隐藏层通道: dynamic_channels
         super(CondInstMaskHead, self).__init__(init_cfg)
         self.in_channels = in_channels
         assert in_stride >= out_stride
@@ -1017,12 +1019,12 @@ class CondInstMaskHead(BaseModule):
         self.dynamic_channels = dynamic_channels
         self.disable_rel_coors = disable_rel_coors
         dy_weights, dy_biases = [], []
-        dynamic_in_channels = in_channels if disable_rel_coors else in_channels + 2
+        dynamic_in_channels = in_channels if disable_rel_coors else in_channels + 2             # disable_rel_coors默认False，若是True则不使用位置编码
         for i in range(dynamic_convs):
             in_chn = dynamic_in_channels if i == 0 else dynamic_channels
             out_chn = 1 if i == dynamic_convs - 1 else dynamic_channels
             dy_weights.append(in_chn * out_chn)
-            dy_biases.append(out_chn)
+            dy_biases.append(out_chn)                                                           # 计算参数数量(list)，输出通道数是1(实例分割)
         self.dy_weights = dy_weights
         self.dy_biases = dy_biases
         self.num_gen_params = sum(dy_weights) + sum(dy_biases)
@@ -1047,7 +1049,7 @@ class CondInstMaskHead(BaseModule):
         self.fp16_enable = False
         self._init_layers()
 
-    def _init_layers(self):
+    def _init_layers(self):                                     # 这个是box_head的预测分支, 一层3×3卷积
         """Initialize layers of the head."""
         self.param_conv = nn.Conv2d(
             self.bbox_head_channels,
@@ -1057,19 +1059,19 @@ class CondInstMaskHead(BaseModule):
             padding=1)
 
     def parse_dynamic_params(self, params):
-        num_insts = params.size(0)
+        num_insts = params.size(0)                                      # 实例数量由params.size(0)获得
         params_list = list(torch.split_with_sizes(
-            params, self.dy_weights + self.dy_biases, dim=1))
+            params, self.dy_weights + self.dy_biases, dim=1))           # 长度为3的俩个list相加，长度为6，前三个是weight，后三个是bias
         weights_list = params_list[:self.dynamic_convs]
         biases_list = params_list[self.dynamic_convs:]
 
         for i in range(self.dynamic_convs):
-            if i < self.dynamic_convs - 1:
+            if i < self.dynamic_convs - 1:                              # 前2层: (num_inst * out_channel, in_channel, 1, 1) 
                 weights_list[i] = weights_list[i].reshape(
                     num_insts * self.dynamic_channels, -1, 1, 1)
                 biases_list[i] = biases_list[i].reshape(
                     num_insts * self.dynamic_channels)
-            else:
+            else:                                                       # 最后1层：(num_inst * out_channel(1), in_channel, 1, 1)
                 weights_list[i] = weights_list[i].reshape(num_insts * 1, -1, 1, 1)
                 biases_list[i] = biases_list[i].reshape(num_insts * 1)
         return weights_list, biases_list
@@ -1085,18 +1087,18 @@ class CondInstMaskHead(BaseModule):
             shift_y, shift_x = torch.meshgrid(shift_y, shift_x)
             locations = torch.stack([shift_x, shift_y], dim=0) + self.in_stride // 2
 
-            rel_coors = coors[..., None, None] - locations[None]
+            rel_coors = coors[..., None, None] - locations[None]                            # (inst_num, 2)[..., None, None] - (2, H, W)[None]
             soi = self.sizes_of_interest.float()[level_inds]
-            rel_coors = rel_coors / soi[..., None, None, None]
+            rel_coors = rel_coors / soi[..., None, None, None]                              # 归一化，不知道为什么要归一化到这个值
             mask_feat = torch.cat([rel_coors, mask_feat], dim=1)
 
-        weights, biases = self.parse_dynamic_params(params)
-        x = mask_feat.reshape(1, -1, H, W)
+        weights, biases = self.parse_dynamic_params(params)                                 # 拆参数
+        x = mask_feat.reshape(1, -1, H, W)                                                  # (N, C, H, W) -> (1, N×C, H, W)
         for i, (w, b) in enumerate(zip(weights, biases)):
             x = F.conv2d(x, w, bias=b, stride=1, padding=0, groups=N)
             if i < self.dynamic_convs - 1:
                 x = F.relu(x)
-        x = x.permute(1, 0, 2, 3)
+        x = x.permute(1, 0, 2, 3)                                                           # (N×C, 1, H, W)，没有reshape的可能是out_channel为1，即(N, 1, H, W)
         x = aligned_bilinear(x, self.in_stride // self.out_stride)
         return x
 

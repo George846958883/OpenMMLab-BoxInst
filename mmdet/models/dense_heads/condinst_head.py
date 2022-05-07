@@ -211,7 +211,7 @@ class CondInstBoxHead(AnchorFreeHead):
                          name='conv_cls',
                          std=0.01,
                          bias_prob=0.01)),
-                 **kwargs):
+                 **kwargs):                                         # center_sampling、center_sample_radius是什么
         self.regress_ranges = regress_ranges
         self.center_sampling = center_sampling
         self.center_sample_radius = center_sample_radius
@@ -230,7 +230,7 @@ class CondInstBoxHead(AnchorFreeHead):
     def _init_layers(self):
         """Initialize layers of the head."""
         super()._init_layers()
-        self.conv_centerness = nn.Conv2d(self.feat_channels, 1, 3, padding=1)
+        self.conv_centerness = nn.Conv2d(self.feat_channels, 1, 3, padding=1)           #中心度head就一层3×3
         self.scales = nn.ModuleList([Scale(1.0) for _ in self.strides])
 
     def forward(self, feats, top_module):
@@ -257,7 +257,8 @@ class CondInstBoxHead(AnchorFreeHead):
                     is decided by top_module.
         """
         return multi_apply(self.forward_single, feats, self.scales,
-                           self.strides, top_module=top_module)
+                           self.strides, top_module=top_module)                         # multi_apply函数是将self.forward_single
+                                                                                        # 分别作用于feats, self.scales, self.strides中的每个元素
     
     def forward_single(self, x, scale, stride, top_module):
         """Forward features of a single scale level.
@@ -280,7 +281,7 @@ class CondInstBoxHead(AnchorFreeHead):
         if self.centerness_on_reg:
             centerness = self.conv_centerness(reg_feat)
         else:
-            centerness = self.conv_centerness(cls_feat)
+            centerness = self.conv_centerness(cls_feat)                                 # 决定conv_centerness输入回归头的特征还是分类头的特征
         # scale the bbox_pred of different level
         # float to avoid overflow when enabling FP16
         bbox_pred = scale(bbox_pred).float()
@@ -290,7 +291,7 @@ class CondInstBoxHead(AnchorFreeHead):
                 bbox_pred *= stride
         else:
             bbox_pred = bbox_pred.exp()
-        param_pred = top_module(reg_feat)
+        param_pred = top_module(reg_feat)                                               # control输入reg_feat
         return cls_score, bbox_pred, centerness, param_pred
 
     @force_fp32(apply_to=('cls_scores', 'bbox_preds', 'centernesses'))
@@ -332,7 +333,7 @@ class CondInstBoxHead(AnchorFreeHead):
                 self.get_targets(all_level_points, gt_bboxes, gt_labels)
 
         num_imgs = cls_scores[0].size(0)
-        # flatten cls_scores, bbox_preds and centerness
+        # flatten cls_scores, bbox_preds and centerness 展平三个输出: [num, 1 or 4],              这三个初始是个list[tensor], 包含各个FPN的输出
         flatten_cls_scores = [
             cls_score.permute(0, 2, 3, 1).reshape(-1, self.cls_out_channels)
             for cls_score in cls_scores
@@ -363,18 +364,18 @@ class CondInstBoxHead(AnchorFreeHead):
             flatten_img_inds.append(img_inds.repeat_interleave(H * W))
             flatten_level_inds.append(torch.full(
                 (num_imgs * H * W, ), i, device=bbox_preds[0].device).long())
-        flatten_img_inds = torch.cat(flatten_img_inds)
-        flatten_level_inds = torch.cat(flatten_level_inds)
+        flatten_img_inds = torch.cat(flatten_img_inds)                                  # 第n个位置属于第几张图，是个一维数组(tensor)
+        flatten_level_inds = torch.cat(flatten_level_inds)                              # 第n个位置属于第几个level，是个一维数组(tensor)
 
         # FG cat_id: [0, num_classes -1], BG cat_id: num_classes
         bg_class_ind = self.num_classes
         pos_inds = ((flatten_labels >= 0)
-                    & (flatten_labels < bg_class_ind)).nonzero().reshape(-1)
+                    & (flatten_labels < bg_class_ind)).nonzero().reshape(-1)            # 正样本的label
         num_pos = torch.tensor(
-            len(pos_inds), dtype=torch.float, device=bbox_preds[0].device)
+            len(pos_inds), dtype=torch.float, device=bbox_preds[0].device)              # 正样本数量
         num_pos = max(reduce_mean(num_pos), 1.0)
         loss_cls = self.loss_cls(
-            flatten_cls_scores, flatten_labels, avg_factor=num_pos)
+            flatten_cls_scores, flatten_labels, avg_factor=num_pos)                     # 分类损失，由cls_score和flatten_labels组成
 
         pos_bbox_preds = flatten_bbox_preds[pos_inds]
         pos_centerness = flatten_centerness[pos_inds]

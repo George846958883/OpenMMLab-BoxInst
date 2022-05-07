@@ -48,7 +48,8 @@ class CondInst(SingleStageDetector):
 
         x = self.extract_feat(img)                                                      # 特征提取网络(backbone)
         cls_score, bbox_pred, centerness, param_pred = \
-                self.bbox_head(x, self.mask_head.param_conv)                            # 分类回归、中心度(FCOS)、参数预测应该是指condinst的mask_head的参数预测(和什么有关？)
+                self.bbox_head(x, self.mask_head.param_conv)                            # 分类回归、中心度(FCOS)
+                                                                                        # param_conv输入为box_head输出的mask_head的参数，写在mask_head里
         bbox_head_loss_inputs = (cls_score, bbox_pred, centerness) + (
             gt_bboxes, gt_labels, img_metas)                                            # 打包predict和gt
         losses, coors, level_inds, img_inds, gt_inds = self.bbox_head.loss(

@@ -1078,7 +1078,9 @@ class CondInstMaskHead(BaseModule):
         return weights_list, biases_list
 
     def forward(self, feat, params, coors, level_inds, img_inds):
-        mask_feat = feat[img_inds]
+        mask_feat = feat[img_inds]                                      # img_inds是将feature(num_imgs)复制(level_H1*level_W1+level_H2*level_W2+...)*img_num份，
+                                                                        # 并标注这张特征图属于哪张图，顺序是(H1*W1*I1+H1*W1*I2+...+H2*W2*I1+H2*W2*I2+...)
+                                                                        # level_inds是标注这张特征图属于哪个FPN层，(H1*W1+H2*W2+...)*I1+...
         N, _, H, W = mask_feat.size()
         if not self.disable_rel_coors:
             shift_x = torch.arange(0, W * self.in_stride, step=self.in_stride,
@@ -1089,6 +1091,7 @@ class CondInstMaskHead(BaseModule):
             locations = torch.stack([shift_x, shift_y], dim=0) + self.in_stride // 2
 
             rel_coors = coors[..., None, None] - locations[None]                            # (inst_num, 2)[..., None, None] - (2, H, W)[None]
+                                                                                            # coors包含了每个实例的位置(采样后的)
             soi = self.sizes_of_interest.float()[level_inds]
             rel_coors = rel_coors / soi[..., None, None, None]                              # 归一化，不知道为什么要归一化到这个值
             mask_feat = torch.cat([rel_coors, mask_feat], dim=1)
@@ -1111,10 +1114,10 @@ class CondInstMaskHead(BaseModule):
                         level_inds,
                         img_inds,
                         gt_inds):
-        num_imgs = param_preds[0].size(0)
+        num_imgs = param_preds[0].size(0)                       # 确实，param_preds是个list(tensor(4-D))，每个scale分开作为list的每一项
         param_preds = torch.cat([
             param_pred.permute(0, 2, 3, 1).flatten(end_dim=2)
-            for param_pred in param_preds], dim=0)
+            for param_pred in param_preds], dim=0)              # [img_num*Ei(Hi*Wi*Li))],与level_ind/img_ind
 
         pos_mask = gt_inds != -1
         param_preds = param_preds[pos_mask]
@@ -1123,8 +1126,8 @@ class CondInstMaskHead(BaseModule):
         img_inds = img_inds[pos_mask]
         gt_inds = gt_inds[pos_mask]
 
-        if self.max_proposals != -1:
-            num_proposals = min(self.max_proposals, param_preds.size(0))
+        if self.max_proposals != -1:                            #若前景数量超了，则随机取num_proposals个sampled_inds位置的前景
+            num_proposals = min(self.max_proposals, param_preds.size(0))            # 这里param_preds可以用coors/level_inds/gt_inds/img_inds中任意一个
             sampled_inds = torch.randperm(
                 num_proposals, device=param_preds.device).long()
         elif self.topk_per_img != -1:
@@ -1165,8 +1168,8 @@ class CondInstMaskHead(BaseModule):
         coors = coors[sampled_inds]
         level_inds = level_inds[sampled_inds]
         img_inds = img_inds[sampled_inds]
-        gt_inds = gt_inds[sampled_inds]
-        return param_preds, coors, level_inds, img_inds, gt_inds
+        gt_inds = gt_inds[sampled_inds]                                         # 采样完毕
+        return param_preds, coors, level_inds, img_inds, gt_inds                # 索引也要采样，size(0) = inst_size
 
     def simple_test(self,
                     mask_feat,
@@ -1235,13 +1238,13 @@ class CondInstMaskHead(BaseModule):
              gt_labels):
         self._iter += 1
         similarities, gt_bitmasks, bitmasks_full = self.get_targets(gt_bboxes, gt_masks, imgs, img_metas)
-        mask_scores = mask_logits.sigmoid()
+        mask_scores = mask_logits.sigmoid()                                                 # sigmoid生成概率图
         gt_bitmasks = torch.cat(gt_bitmasks, dim=0)
         gt_bitmasks = gt_bitmasks[gt_inds].unsqueeze(1).to(mask_scores.dtype)
 
         losses= {}
 
-        if len(mask_scores) == 0: #there is no instances detected
+        if len(mask_scores) == 0: #there is no instances detected                           # 一个实例都没有
             dummy_loss = 0 * mask_scores.sum()
             if not self.boxinst_enabled:
                 losses["loss_mask"] = dummy_loss
@@ -1261,7 +1264,7 @@ class CondInstMaskHead(BaseModule):
 
             loss_pairwise = (pairwise_losses * weights).sum() / weights.sum().clamp(min=1.0)
 
-            warmup_factor = min(self._iter.item() / float(self._warmup_iters), 1.0)
+            warmup_factor = min(self._iter.item() / float(self._warmup_iters), 1.0)                         # warmup成对损失
             loss_pairwise = loss_pairwise * warmup_factor
 
             losses.update({

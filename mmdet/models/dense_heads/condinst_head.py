@@ -17,22 +17,22 @@ INF = 1e8
 def compute_pairwise_term(mask_logits, pairwise_size, pairwise_dilation):
     assert mask_logits.dim() == 4
 
-    log_fg_prob = F.logsigmoid(mask_logits)
-    log_bg_prob = F.logsigmoid(-mask_logits)
+    log_fg_prob = F.logsigmoid(mask_logits)                     #log(p_i)
+    log_bg_prob = F.logsigmoid(-mask_logits)                    #log(1-p_i)
 
     log_fg_prob_unfold = unfold_wo_center(
         log_fg_prob, kernel_size=pairwise_size,
         dilation=pairwise_dilation
-    )
+    )                                                           #log(p_j)，[N,C,pairwise_size^2-1,H,W]
     log_bg_prob_unfold = unfold_wo_center(
         log_bg_prob, kernel_size=pairwise_size,
         dilation=pairwise_dilation
-    )
+    )                                                           #log(1-p_j)，[N,C,pairwise_size^2-1,H,W]
 
     # the probability of making the same prediction = p_i * p_j + (1 - p_i) * (1 - p_j)
     # we compute the the probability in log space to avoid numerical instability
-    log_same_fg_prob = log_fg_prob[:, :, None] + log_fg_prob_unfold
-    log_same_bg_prob = log_bg_prob[:, :, None] + log_bg_prob_unfold
+    log_same_fg_prob = log_fg_prob[:, :, None] + log_fg_prob_unfold             #log(p_i)+log(p_j) = log(p_i*p_j)
+    log_same_bg_prob = log_bg_prob[:, :, None] + log_bg_prob_unfold             #log(1-p_i)+log(1-p_j) = log[(1-p_i)*(1-p_j)]
 
     # this equation is equal to log(p_i * p_j + (1 - p_i) * (1 - p_j))
     # max is used to prevent overflow
@@ -40,9 +40,9 @@ def compute_pairwise_term(mask_logits, pairwise_size, pairwise_dilation):
     log_same_prob = torch.log(
         torch.exp(log_same_fg_prob - max_) +
         torch.exp(log_same_bg_prob - max_)
-    ) + max_
+    ) + max_                                                                    #就是log_same_fg_prob+log_same_bg_prob=p_i*p_j+(1-p_i)*(1-p_j)
 
-    return -log_same_prob[:, 0]
+    return -log_same_prob[:, 0]            # 其实是降维，因为这个时候prob的C是1，结构是[N,C,pairwise_size^2-1,H,W],返回结构就变成了[N,pairwise_size^2-1,H,W]
 
 
 def dice_coefficient(x, target):
@@ -61,7 +61,7 @@ def dice_coefficient(x, target):
     loss = 1. - (2 * intersection / union)
     return loss
 
-def compute_project_term(mask_scores, gt_bitmasks):
+def compute_project_term(mask_scores, gt_bitmasks):                                     # 看起来mask_scores和gt_bitmasks是对齐的
     mask_losses_y = dice_coefficient(
         mask_scores.max(dim=2, keepdim=True)[0],
         gt_bitmasks.max(dim=2, keepdim=True)[0]

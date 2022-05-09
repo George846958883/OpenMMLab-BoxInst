@@ -1241,7 +1241,7 @@ class CondInstMaskHead(BaseModule):
         mask_scores = mask_logits.sigmoid()                                                 # sigmoid生成概率图
         gt_bitmasks = torch.cat(gt_bitmasks, dim=0)
         gt_bitmasks = gt_bitmasks[gt_inds].unsqueeze(1).to(mask_scores.dtype)
-
+        # gt_inds用于选择gt_masks哪些有效，这是sample出来的，同时sample的还有param_pred, coors, level_inds, img_inds。就是为了找出哪些实例要用于计算loss
         losses= {}
 
         if len(mask_scores) == 0: #there is no instances detected                           # 一个实例都没有

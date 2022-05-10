@@ -605,15 +605,17 @@ class CondInstBoxHead(AnchorFreeHead):
                 each element represents the class label of the corresponding
                 box.
         """
+        # 输入：cls_scores、bbox_preds、centernesses、param_preds、img_metas。
+        # 都是list[]，里面cls_scores、bbox_preds、centernesses、param_preds是tensor，img_metas是dict。list的长度是取的FPN的层数
         assert len(cls_scores) == len(bbox_preds)
-        num_levels = len(cls_scores)
+        num_levels = len(cls_scores)                                # list的长度是取的FPN的层数
 
-        featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
+        featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]     # 每层特征的大小
         mlvl_points = self.get_points(featmap_sizes, bbox_preds[0].dtype,
-                                      bbox_preds[0].device)
+                                      bbox_preds[0].device)                 # list[(h,w)]，俩矩阵，h是对应位置的元素在哪一行，w是对应位置的元素在哪一列(和FPN的size相关)
 
-        cls_score_list = [cls_scores[i].detach() for i in range(num_levels)]
-        bbox_pred_list = [bbox_preds[i].detach() for i in range(num_levels)]
+        cls_score_list = [cls_scores[i].detach() for i in range(num_levels)]# .detach()是截断梯度，复制一份tensor, 新的tensor和原tensor共享存储空间，
+        bbox_pred_list = [bbox_preds[i].detach() for i in range(num_levels)]# 但是梯度传播到新tensor那里就会截断梯度
         centerness_pred_list = [
             centernesses[i].detach() for i in range(num_levels)
         ]

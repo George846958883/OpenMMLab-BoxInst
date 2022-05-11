@@ -85,12 +85,14 @@ class CondInst(SingleStageDetector):
     def simple_test(self, img, img_metas, rescale=False):
         feat = self.extract_feat(img)
         outputs = self.bbox_head.simple_test(
-            feat, self.mask_head.param_conv, img_metas, rescale=rescale)
+            feat, self.mask_head.param_conv, img_metas, rescale=rescale)                # output：tuple(tensor,...)
         det_bboxes, det_labels, det_params, det_coors, det_level_inds = zip(*outputs)
+               # 第一个是tensor(batch_size, num_inst,5)，第二个是tensor(batch_size, num_inst,)[包括背景类]，后面是mlvl_param_pred、mlvl_coors、lvl_inds(经过nms后)
         bbox_results = [
             bbox2result(det_bbox, det_label, self.bbox_head.num_classes)
             for det_bbox, det_label in zip(det_bboxes, det_labels)
         ]
+        # bbox_results: list(list(array)), len(第一个list) = batch_size，len(第二个list) = num_classes，len(ndarray)是这个类别的实例数
 
         mask_feat = self.mask_branch(feat)
         mask_results = self.mask_head.simple_test(
@@ -102,7 +104,8 @@ class CondInst(SingleStageDetector):
             img_metas,
             self.bbox_head.num_classes,
             rescale=rescale)
-        return list(zip(bbox_results, mask_results))
+        return list(zip(bbox_results, mask_results))    # list(tuple(tensor,tensor))，
+                                                        # zip的作用就是把相同维度的list按照相同下标组合在一起形成tuple，最后由这些tuple形成list
 
     def aug_test(self, imgs, img_metas, rescale=False):
         raise NotImplementedError

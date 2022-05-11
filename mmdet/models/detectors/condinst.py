@@ -104,7 +104,7 @@ class CondInst(SingleStageDetector):
             img_metas,
             self.bbox_head.num_classes,
             rescale=rescale)
-        return list(zip(bbox_results, mask_results))    # list(tuple(tensor,tensor))，
+        return list(zip(bbox_results, mask_results))    # list(tuple(list(ndarray),list(ndarray)))，
                                                         # zip的作用就是把相同维度的list按照相同下标组合在一起形成tuple，最后由这些tuple形成list
 
     def aug_test(self, imgs, img_metas, rescale=False):

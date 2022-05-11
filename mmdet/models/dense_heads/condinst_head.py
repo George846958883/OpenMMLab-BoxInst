@@ -618,7 +618,7 @@ class CondInstBoxHead(AnchorFreeHead):
         bbox_pred_list = [bbox_preds[i].detach() for i in range(num_levels)]# 但是梯度传播到新tensor那里就会截断梯度
         centerness_pred_list = [
             centernesses[i].detach() for i in range(num_levels)
-        ]
+        ]                                                                   # xxx_xxx_list和xxx_xxx相同，就是其中tensor都没得梯度
         if torch.onnx.is_in_onnx_export():
             assert len(
                 img_metas
@@ -628,7 +628,7 @@ class CondInstBoxHead(AnchorFreeHead):
             img_shapes = [
                 img_metas[i]['img_shape']
                 for i in range(cls_scores[0].shape[0])
-            ]
+            ]                                                               # cls_score[0].shape(0)是batch_size
         scale_factors = [
             img_metas[i]['scale_factor'] for i in range(cls_scores[0].shape[0])
         ]
@@ -686,7 +686,7 @@ class CondInstBoxHead(AnchorFreeHead):
         batch_size = cls_scores[0].shape[0]
         # convert to tensor to keep tracing
         nms_pre_tensor = torch.tensor(
-            cfg.get('nms_pre', -1), device=device, dtype=torch.long)
+            cfg.get('nms_pre', -1), device=device, dtype=torch.long)                # nms_pre_tensor = 1000
         mlvl_coors = []
         mlvl_bboxes = []
         mlvl_scores = []
@@ -694,34 +694,36 @@ class CondInstBoxHead(AnchorFreeHead):
         mlvl_param_pred = []
 
         for cls_score, bbox_pred, centerness, param_pred, points in zip(
-                cls_scores, bbox_preds, centernesses, param_preds, mlvl_points):
+                cls_scores, bbox_preds, centernesses, param_preds, mlvl_points):    # 对于其中一层来说
             assert cls_score.size()[-2:] == bbox_pred.size()[-2:]
             scores = cls_score.permute(0, 2, 3, 1).reshape(
-                batch_size, -1, self.cls_out_channels).sigmoid()
+                batch_size, -1, self.cls_out_channels).sigmoid()                    # tensor.size([batch_size, H×W, cls_num])
             centerness = centerness.permute(0, 2, 3,
                                             1).reshape(batch_size,
-                                                       -1).sigmoid()
+                                                       -1).sigmoid()                # tensor.size([batch_size, H×W])
 
             bbox_pred = bbox_pred.permute(0, 2, 3,
-                                          1).reshape(batch_size, -1, 4)
+                                          1).reshape(batch_size, -1, 4)             # tensor.size([batch_size, H×W, 4])
             param_num = param_pred.size(1)
             param_pred = param_pred.permute(0, 2, 3, 1).reshape(batch_size,
-                                                                -1, param_num)
-            points = points.expand(batch_size, -1, 2)
+                                                                -1, param_num)      # tensor.size([batch_size, H×W, param_num])
+            points = points.expand(batch_size, -1, 2)                               # tensor.size([batch_size, H×W, 2])
             # Get top-k prediction
             from mmdet.core.export import get_k_for_topk
-            nms_pre = get_k_for_topk(nms_pre_tensor, bbox_pred.shape[1])
+            nms_pre = get_k_for_topk(nms_pre_tensor, bbox_pred.shape[1])            # H×W大于1000则返回1000，否则返回-1(是否需要处理至小于1000个框)
             if nms_pre > 0:
-                max_scores, _ = (scores * centerness[..., None]).max(-1)
-                _, topk_inds = max_scores.topk(nms_pre)
+                max_scores, _ = (scores * centerness[..., None]).max(-1)            # 在最后一个维度比大小，返回最大的值和其索引。
+                                                                                    # tensor.size([batch_size, H×W])
+                _, topk_inds = max_scores.topk(nms_pre)                             # tensor.size([batch_size, nms_pre])
                 batch_inds = torch.arange(batch_size).view(
-                    -1, 1).expand_as(topk_inds).long()
+                    -1, 1).expand_as(topk_inds).long()                              # 图像索引：某个框属于这个batch中哪一个image。
+                                                                                    # tensor.size([batch_size, nms_pre])
                 # Avoid onnx2tensorrt issue in https://github.com/NVIDIA/TensorRT/issues/1134 # noqa: E501
                 if torch.onnx.is_in_onnx_export():
                     raise NotImplementedError("CondInst doesn't support ONNX currently")
                 else:
-                    points = points[batch_inds, topk_inds, :]
-                    bbox_pred = bbox_pred[batch_inds, topk_inds, :]
+                    points = points[batch_inds, topk_inds, :]                       # 取scores*centerness最大的样本
+                    bbox_pred = bbox_pred[batch_inds, topk_inds, :]                 # tensor.size([batch_size, nms_pre, 各自的size])
                     scores = scores[batch_inds, topk_inds, :]
                     centerness = centerness[batch_inds, topk_inds]
                     param_pred = param_pred[batch_inds, topk_inds, :]
@@ -743,7 +745,7 @@ class CondInstBoxHead(AnchorFreeHead):
                 scale_factors).unsqueeze(1)
         batch_mlvl_scores = torch.cat(mlvl_scores, dim=1)
         batch_mlvl_centerness = torch.cat(mlvl_centerness, dim=1)
-        batch_mlvl_param_pred = torch.cat(mlvl_param_pred, dim=1)
+        batch_mlvl_param_pred = torch.cat(mlvl_param_pred, dim=1)                   # tensor.size([batch_size, pre1+pre2+..., 各自的size])
 
         # Replace multiclass_nms with ONNX::NonMaxSuppression in deployment
         if torch.onnx.is_in_onnx_export() and with_nms:
@@ -752,7 +754,7 @@ class CondInstBoxHead(AnchorFreeHead):
         # BG cat_id: num_class
         padding = batch_mlvl_scores.new_zeros(batch_size,
                                               batch_mlvl_scores.shape[1], 1)
-        batch_mlvl_scores = torch.cat([batch_mlvl_scores, padding], dim=-1)
+        batch_mlvl_scores = torch.cat([batch_mlvl_scores, padding], dim=-1)         # padding的作用是什么呢
 
         if with_nms:
             det_results = []
@@ -770,7 +772,7 @@ class CondInstBoxHead(AnchorFreeHead):
                     others=[mlvl_param_pred,
                             mlvl_coors,
                             lvl_inds]
-                )
+                )                                                                   # nms
                 outputs = (det_bbox, det_label) + tuple(others)
                 det_results.append(outputs)
         else:
